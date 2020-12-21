@@ -1,6 +1,7 @@
 import asyncio
 import http
 import logging
+import ssl
 from urllib.parse import unquote
 
 import h11
@@ -207,7 +208,26 @@ class H11Protocol(asyncio.Protocol):
                     "raw_path": raw_path,
                     "query_string": query_string,
                     "headers": self.headers,
+                    "extensions": {},
                 }
+
+                ssl_object = self.transport.get_extra_info('ssl_object')
+                if ssl_object:
+                    tlsext = self.scope["extensions"]["tls"] = {
+                        "tls_used": True,
+                        "client_cert_chain": [],
+                        "tls_version": {
+                            "TLSv1":   0x0301,
+                            "TLSv1.1": 0x0302,
+                            "TLSv1.2": 0x0303,
+                            "TLSv1.3": 0x0304,
+                        }.get(ssl_object.version(), None)
+                    }
+                    client_cert = ssl_object.getpeercert(binary_form=True)
+                    if client_cert:
+                        tlsext["client_cert_chain"].append(
+                            ssl.DER_cert_to_PEM_cert(client_cert)
+                        )
 
                 for name, value in self.headers:
                     if name == b"connection":
